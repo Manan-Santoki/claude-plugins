@@ -9,15 +9,18 @@ One Python script, `<skill-dir>/scripts/s3up.py` (`<skill-dir>` = the base direc
 loads). It needs only Python 3.9+; on first run it creates a private venv with boto3 in
 `~/.cache/s3-upload/venv` and re-runs itself there. Use `python3` on Linux/macOS, `python` or `py` on Windows.
 
+Call it directly (`python3 <skill-dir>/scripts/s3up.py put …`), or define a function: a `S3UP="python3 …"`
+variable does not word-split in zsh.
+
 ```sh
-S3UP="python3 <skill-dir>/scripts/s3up.py"
-$S3UP whoami                              # is it configured? which endpoint/bucket? (prints no secrets)
-$S3UP put <file-or-dir> [...]             # default prefix: <cwd name>/<YYYY-MM-DD>/
-$S3UP put video.mp4 --prefix project/topic
-$S3UP put big.mp4 --days 2                # link lifetime (max 7 days)
-$S3UP ls [prefix]
-$S3UP link <key>                          # fresh 7-day link for an existing object
-$S3UP rm <key>                            # delete, ONLY when the owner asks
+s3up() { python3 "<skill-dir>/scripts/s3up.py" "$@"; }
+s3up whoami                              # is it configured? which endpoint/bucket? (prints no secrets)
+s3up put <file-or-dir> [...]             # default prefix: <cwd name>/<YYYY-MM-DD>/
+s3up put video.mp4 --prefix project/topic
+s3up put big.mp4 --days 2                # link lifetime (max 7 days)
+s3up ls [prefix]
+s3up link <key>                          # fresh 7-day link for an existing object
+s3up rm <key>                            # delete, ONLY when the owner asks
 ```
 
 `put` verifies each upload's size on the server, then prints the key, size, a presigned download link (the
@@ -47,4 +50,4 @@ not the bucket root, and check `ls` before reusing a generic name so nothing is 
 Behind Cloudflare, S3 servers break stock boto3 in four ways; the script works around all of them: streamed CRC
 checksums ("Payload hash mismatch") are turned off; files over 95 MB use a hand-rolled multipart upload in
 64 MB parts that strips weak `W/` ETags ("ETag mismatch"); request bodies stay under the 100 MB cap; object
-size is checked via listing because HEAD can return 403.
+size is checked via listing because HEAD can return 403. Tested direct (no proxy) with a 1 GB file: ~24 s, md5 round-trip OK.
