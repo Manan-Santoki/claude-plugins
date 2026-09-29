@@ -1,0 +1,12 @@
+{
+  "name": "msantoki",
+  "owner": { "name": "Manan Santoki" },
+  "metadata": { "description": "Manan's Claude Code plugins" },
+  "plugins": [
+    {
+      "name": "s3-upload",
+      "source": "./plugins/s3-upload",
+      "description": "Upload files to an S3-compatible bucket and get presigned review links."
+    }
+  ]
+}

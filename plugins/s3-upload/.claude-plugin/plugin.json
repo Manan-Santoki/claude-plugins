@@ -1,0 +1,7 @@
+{
+  "name": "s3-upload",
+  "version": "1.0.0",
+  "description": "Upload files and folders to an S3-compatible bucket (MinIO, R2, behind Cloudflare too) and get presigned review links. Keys stay in ~/.config/s3-upload, never in the plugin.",
+  "author": { "name": "Manan Santoki" },
+  "keywords": ["s3", "upload", "minio", "files", "share"]
+}
