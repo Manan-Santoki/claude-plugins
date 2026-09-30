@@ -24,7 +24,8 @@ Or from inside Claude Code: `/plugin marketplace add Manan-Santoki/claude-plugin
 
 ### Configure (once per machine)
 
-Ask Claude to "set up s3-upload" and run the command it gives you, or run it yourself:
+Run `/s3-upload:setup` in Claude Code: it walks you through your provider's endpoint, has you type the secret
+into the terminal (never the chat), tests the connection and does a test upload. Or run the setup yourself:
 
 ```sh
 python3 ~/.claude/plugins/cache/msantoki/s3-upload/*/skills/s3-upload/scripts/s3up.py configure
