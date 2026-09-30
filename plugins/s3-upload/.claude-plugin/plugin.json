@@ -1,7 +1,20 @@
 {
   "name": "s3-upload",
-  "version": "1.0.1",
-  "description": "Upload files and folders to an S3-compatible bucket (MinIO, R2, behind Cloudflare too) and get presigned review links. Keys stay in ~/.config/s3-upload, never in the plugin.",
-  "author": { "name": "Manan Santoki" },
-  "keywords": ["s3", "upload", "minio", "files", "share"]
+  "version": "1.1.0",
+  "description": "Upload files and folders to any S3-compatible bucket (AWS S3, Cloudflare R2, MinIO, Alarik, B2\u2026, proxied or not) and get presigned links. Keys stay on your machine, never in the plugin.",
+  "author": {
+    "name": "Manan Santoki"
+  },
+  "keywords": [
+    "s3",
+    "upload",
+    "minio",
+    "r2",
+    "files",
+    "share",
+    "presigned"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/Manan-Santoki/claude-plugins",
+  "repository": "https://github.com/Manan-Santoki/claude-plugins"
 }
