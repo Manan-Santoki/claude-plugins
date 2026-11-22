@@ -102,7 +102,12 @@ def logged_in(request):
 
 
 def same_origin(request):
+    site = request.headers.get("sec-fetch-site")
+    if site:  # modern browsers say directly whether the request came from our own pages
+        return site in ("same-origin", "none")
     origin = request.headers.get("origin") or request.headers.get("referer") or ""
+    if origin == "null":
+        origin = request.headers.get("referer") or ""
     if not origin:
         return True  # non-browser client; the SameSite=Strict cookie still protects the session
     o, p = urlparse(origin), urlparse(PUBLIC_URL)
@@ -140,7 +145,7 @@ ol{padding-left:20px;margin:0}li{margin:0 0 8px}
 def page(title, body, status=200):
     doc = (f"<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport "
            f"content='width=device-width,initial-scale=1'><title>{html.escape(title)}</title>"
-           f"<meta name=referrer content=no-referrer><style>{CSS}</style></head><body><main>{body}</main></body></html>")
+           f"<meta name=referrer content=same-origin><style>{CSS}</style></head><body><main>{body}</main></body></html>")
     return HTMLResponse(doc, status, headers={"Cache-Control": "no-store", "X-Frame-Options": "DENY",
                                               # no form-action: the consent form redirects on to the app's callback
                                               "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; "
