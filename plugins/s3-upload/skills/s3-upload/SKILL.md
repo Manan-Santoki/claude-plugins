@@ -5,6 +5,24 @@ description: Upload files or folders (videos, renders, reports, builds, screensh
 
 # s3-upload
 
+## Server mode first (settings shared by every device)
+
+If the `s3-upload` MCP tools are available (`create_upload_ticket`, `upload_text`, `list_files`, `get_link`, …,
+usually from a claude.ai connector or `claude mcp add`), use them: the bucket keys and defaults live on the user's
+self-hosted server, so nothing needs configuring on this machine.
+
+- Files or folders on this machine, any size: call `create_upload_ticket` (pass `prefix`, e.g.
+  `<project>/<YYYY-MM-DD>` or `project/topic`), then run the `push` line it returns with this skill's script:
+  `python3 <skill-dir>/scripts/s3up.py push <ticket-url> <file-or-dir> [...]`. It needs only the standard library
+  (no venv, no keys) and prints each key, size and link. One ticket covers many files and closes after the run.
+- Text or small content from the conversation: `upload_text` / `upload_base64`. A public URL: `upload_from_url`.
+- `list_files`, `get_link`, `read_file`, `delete_file` (only when asked), `status` to check the setup.
+- Bucket keys are changed only on the server's settings page (`status` prints its URL), never in chat.
+
+Use the local mode below only when those tools aren't available.
+
+## Local mode
+
 One Python script, `<skill-dir>/scripts/s3up.py` (`<skill-dir>` = the base directory printed when this skill
 loads). It needs only Python 3.9+; on first run it creates a private venv with boto3 in
 `~/.cache/s3-upload/venv` and re-runs itself there. Use `python3` on Linux/macOS, `python` or `py` on Windows.
@@ -26,7 +44,7 @@ s3up rm <key>                            # delete, ONLY when the user asks
 `put` verifies each upload's size on the server, then prints the key, size, a presigned download link (the
 bucket can stay private; links last up to 7 days) and a web-console URL if one is configured.
 
-## Setup (once per machine)
+## Setup (once per machine, local mode)
 
 If `whoami` says it is not configured, ask the user to run the interactive setup themselves, so the secret never
 enters the chat: `! python3 <skill-dir>/scripts/s3up.py configure`. It prompts for the endpoint, bucket and access

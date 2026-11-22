@@ -9,7 +9,8 @@ folders) in your S3-compatible bucket and hands back presigned links you can ope
   including ones behind a proxy like Cloudflare.
 - Large files: multipart uploads that survive proxies (weak ETags, 100 MB body caps, blocked HEAD requests).
 - Every upload is verified on the server before the link is returned.
-- Keys stay on your machine in `~/.config/s3-upload/config.json` (mode 600), never in the plugin or the chat.
+- Keys stay on your machine in `~/.config/s3-upload/config.json` (mode 600), or on your own server, never in the
+  plugin or the chat.
 - Only needs Python 3.9+; it installs boto3 into its own venv on first use. Linux, macOS and Windows.
 
 ### Install
@@ -22,7 +23,15 @@ claude plugin install s3-upload@msantoki
 Or from inside Claude Code: `/plugin marketplace add Manan-Santoki/claude-plugins`, then
 `/plugin install s3-upload@msantoki`.
 
-### Configure (once per machine)
+### Shared settings for every device (optional, self-hosted)
+
+Want the same bucket in Claude on your phone, on claude.ai, and in every Claude Code session without configuring
+each machine? Run the small server in [`server/`](server/README.md) (one Docker container, Dokploy-ready), add it
+as a connector in the Claude app, and change keys and defaults from its settings page in any browser. In Claude
+Code the plugin then uploads local files straight to the bucket through one-off tickets, with no keys on the
+machine.
+
+### Configure locally (once per machine)
 
 Run `/s3-upload:setup` in Claude Code: it walks you through your provider's endpoint, has you type the secret
 into the terminal (never the chat), tests the connection and does a test upload. Or run the setup yourself:
@@ -54,6 +63,7 @@ s3up.py put video.mp4 --prefix project/demo     # upload, print a presigned link
 s3up.py ls project/                              # list
 s3up.py link project/demo/video.mp4              # new link for an existing file
 s3up.py whoami                                   # check the setup (prints no secrets)
+s3up.py push <ticket-url> build/ video.mp4       # server mode: upload through a ticket from create_upload_ticket
 ```
 
 ## License

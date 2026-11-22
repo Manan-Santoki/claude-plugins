@@ -1,0 +1,20 @@
+# Dokploy: Compose service from this repo, compose path ./server/docker-compose.yml.
+# Set PUBLIC_URL and ADMIN_PASSWORD in the service's Environment tab, and add a domain for port 8080.
+services:
+  s3up:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    environment:
+      PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL, e.g. https://s3.example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD (12+ characters)}
+      # optional; generated and kept in the volume when unset
+      SECRET_KEY: ${SECRET_KEY:-}
+    volumes:
+      - s3up-data:/data
+    expose:
+      - "8080"
+
+volumes:
+  s3up-data:

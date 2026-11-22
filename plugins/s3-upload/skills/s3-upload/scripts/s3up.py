@@ -9,14 +9,20 @@ Usage:
   s3up.py ls [PREFIX]                                         list objects
   s3up.py link <key> [--days N]                               fresh presigned link for an existing object
   s3up.py rm <key>                                            delete one object
+  s3up.py push <ticket-url> <file-or-dir> [...]               upload through an s3-upload server ticket
+                                                              (no keys or boto3 needed on this machine)
 
 Works on Linux, macOS and Windows with only Python 3.9+: on first run it creates a private venv with boto3
 (~/.cache/s3-upload/venv) and re-runs itself there.
 
-Credentials: ~/.config/s3-upload/config.json (mode 600), or S3UP_CONFIG=<path>. Environment variables
+`push` is for the self-hosted s3-upload server: Claude's `create_upload_ticket` tool returns the ticket URL, and the
+bytes go straight from this machine to the bucket over presigned URLs. It only needs the standard library.
+
+Credentials (local mode): ~/.config/s3-upload/config.json (mode 600), or S3UP_CONFIG=<path>. Environment variables
 S3UP_ENDPOINT, S3UP_BUCKET, S3UP_ACCESS_KEY, S3UP_SECRET_KEY, S3UP_REGION, S3UP_CONSOLE override the file.
 """
-import argparse, datetime, getpass, json, mimetypes, os, subprocess, sys
+import argparse, datetime, getpass, json, mimetypes, os, subprocess, sys, time
+import urllib.error, urllib.request
 from pathlib import Path
 
 HOME = Path.home()
@@ -139,6 +145,111 @@ def upload(s3, bucket, path, key, ctype):
         raise
 
 
+# ---------- push: upload through a server ticket (stdlib only) ----------
+
+def _http(method, url, data=None, headers=None, timeout=600):
+    req = urllib.request.Request(url, data=data, method=method, headers={"User-Agent": "s3up-push/2", **(headers or {})})
+    return urllib.request.urlopen(req, timeout=timeout)
+
+
+def _api(url, payload):
+    body = json.dumps(payload).encode()
+    for attempt in range(1, 5):
+        try:
+            with _http("POST", url, body, {"Content-Type": "application/json"}, 300) as r:
+                return json.loads(r.read() or b"{}")
+        except urllib.error.HTTPError as e:
+            try:
+                msg = json.loads(e.read()).get("error")
+            except Exception:
+                msg = None
+            if e.code >= 500 and e.code != 502 and attempt < 4:
+                time.sleep(2 ** attempt)
+                continue
+            sys.exit(f"server: {msg or f'HTTP {e.code}'}")
+        except (urllib.error.URLError, OSError) as e:
+            if attempt == 4:
+                sys.exit(f"can't reach the s3-upload server: {e}")
+            time.sleep(2 ** attempt)
+
+
+def _put(url, data, headers, what):
+    for attempt in range(1, 5):
+        try:
+            if hasattr(data, "seek"):
+                data.seek(0)
+            with _http("PUT", url, data, headers) as r:
+                return r.headers.get("ETag", "")
+        except (urllib.error.URLError, OSError) as e:
+            detail = ""
+            if isinstance(e, urllib.error.HTTPError):
+                detail = e.read()[:300].decode("utf-8", "replace")
+                if e.code < 500 and e.code != 429:
+                    sys.exit(f"upload of {what} rejected: HTTP {e.code} {detail}")
+            if attempt == 4:
+                sys.exit(f"upload of {what} failed after retries: {e} {detail}")
+            print(f"  retrying {what} ({e})", file=sys.stderr)
+            time.sleep(2 ** attempt)
+
+
+def _push_one(ticket, f, rel):
+    size = f.stat().st_size
+    ctype = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
+    plan = _api(f"{ticket}/start", {"name": rel, "size": size, "content_type": ctype})
+    try:
+        if plan["mode"] == "single":
+            with open(f, "rb") as fh:
+                _put(plan["url"], fh, {**plan["headers"], "Content-Length": str(size)}, rel)
+            result = _api(f"{ticket}/finish", {"id": plan["id"]})
+        else:
+            parts, ps, total = [], plan["part_size"], len(plan["urls"])
+            with open(f, "rb") as fh:
+                for n, url in enumerate(plan["urls"], 1):
+                    chunk = fh.read(ps)
+                    etag = _put(url, chunk, {"Content-Length": str(len(chunk))}, f"{rel} part {n}")
+                    parts.append({"n": n, "etag": etag})
+                    print(f"  part {n}/{total}", file=sys.stderr)
+            result = _api(f"{ticket}/finish", {"id": plan["id"], "parts": parts})
+    except BaseException:
+        try:
+            _api(f"{ticket}/abort", {"id": plan["id"]})
+        except BaseException:
+            pass
+        raise
+    return result
+
+
+def cmd_push(a):
+    ticket = a.ticket.rstrip("/")
+    if "/t/" not in ticket:
+        sys.exit("the first argument must be the ticket URL from create_upload_ticket (https://<server>/t/<ticket>)")
+    files = _collect(a.paths)
+    console = None
+    for f, rel in files:
+        r = _push_one(ticket, f, rel)
+        console = r.get("console") or console
+        print(f"uploaded  {r['key']}  ({human(r['size'])})")
+        print(f"  link    {r['link']}")
+    if console:
+        print(f"console   {console}")
+    try:
+        _http("POST", f"{ticket}/close", b"{}", {"Content-Type": "application/json"}, 30).close()
+    except Exception:
+        pass  # best effort; the ticket expires on its own
+
+
+def _collect(paths):
+    files = []
+    for p in map(Path, paths):
+        if p.is_dir():
+            files += [(f, f"{p.name}/{f.relative_to(p).as_posix()}") for f in sorted(p.rglob("*")) if f.is_file()]
+        elif p.is_file():
+            files.append((p, p.name))
+        else:
+            sys.exit(f"not found: {p}")
+    return files
+
+
 def default_prefix():
     project = Path.cwd().name or "misc"
     return f"{project}/{datetime.date.today().isoformat()}"
@@ -189,15 +300,7 @@ def cmd_whoami(a):
 def cmd_put(a):
     s3, c = client()
     prefix = (a.prefix if a.prefix is not None else default_prefix()).strip("/")
-    files = []
-    for p in map(Path, a.paths):
-        if p.is_dir():
-            files += [(f, f"{p.name}/{f.relative_to(p).as_posix()}") for f in sorted(p.rglob("*")) if f.is_file()]
-        elif p.is_file():
-            files.append((p, p.name))
-        else:
-            sys.exit(f"not found: {p}")
-    for f, rel in files:
+    for f, rel in _collect(a.paths):
         key = f"{prefix}/{rel}" if prefix else rel
         ctype = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
         upload(s3, c["bucket"], f, key, ctype)
@@ -231,7 +334,8 @@ def cmd_rm(a):
 
 
 def main():
-    ensure_boto3()
+    if len(sys.argv) < 2 or sys.argv[1] != "push":
+        ensure_boto3()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("configure")
@@ -244,6 +348,7 @@ def main():
     p = sub.add_parser("ls"); p.add_argument("prefix", nargs="?"); p.set_defaults(fn=cmd_ls)
     p = sub.add_parser("link"); p.add_argument("key"); p.add_argument("--days", type=float, default=7); p.set_defaults(fn=cmd_link)
     p = sub.add_parser("rm"); p.add_argument("key"); p.set_defaults(fn=cmd_rm)
+    p = sub.add_parser("push"); p.add_argument("ticket"); p.add_argument("paths", nargs="+"); p.set_defaults(fn=cmd_push)
     a = ap.parse_args()
     a.fn(a)
 

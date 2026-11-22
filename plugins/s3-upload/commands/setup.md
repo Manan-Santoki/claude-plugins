@@ -4,6 +4,13 @@ description: Connect s3-upload to your S3-compatible bucket (AWS S3, R2, MinIO, 
 
 Help me connect the s3-upload plugin to my bucket.
 
+0. If the s3-upload MCP tools are available (for example `status`, `create_upload_ticket`), call `status`. If access is
+   OK, tell me the server, endpoint and bucket and stop: settings live on that server and apply to every device.
+   If it reports an error, send me to the settings page it prints. If I'd like settings shared across devices
+   and the Claude apps but have no server yet, point me to `server/README.md` in
+   https://github.com/Manan-Santoki/claude-plugins (self-hosted, one Docker container). Otherwise continue with
+   local setup on this machine:
+
 1. Find the script: it is `skills/s3-upload/scripts/s3up.py` inside this plugin (the s3-upload skill's base directory). Run `python3 <that path> whoami` (use `python` on Windows). If it already works, tell me which endpoint and bucket it uses and stop unless I want to change it.
 2. Otherwise ask me which provider I use, then show me the endpoint format from this table and what I need to fill in:
    | Provider | Endpoint | Region |
